@@ -154,4 +154,18 @@ publishing {
 tasks.named("generateMetadataFileForModernDisguisePublication") {
     dependsOn(tasks.named("aggregateSources"))
     dependsOn(tasks.named("aggregateJavadoc"))
+    dependsOn(tasks.named("shadowJar"))
+}
+
+// Ensure publish task has all required dependencies (Gradle 8.8+ strict validation)
+tasks.withType<PublishToMavenLocal> {
+    dependsOn(tasks.named("shadowJar"))
+    dependsOn(tasks.named("aggregateSources"))
+    dependsOn(tasks.named("aggregateJavadoc"))
+}
+
+tasks.withType<PublishToMavenRepository> {
+    dependsOn(tasks.named("shadowJar"))
+    dependsOn(tasks.named("aggregateSources"))
+    dependsOn(tasks.named("aggregateJavadoc"))
 }
