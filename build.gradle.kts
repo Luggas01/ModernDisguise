@@ -11,7 +11,8 @@ plugins {
 
 allprojects {
     group = "dev.iiahmed"
-    version = "4.6"
+    // Use VERSION_NAME from JitPack environment, fallback to 4.6 for local builds
+    version = System.getenv("VERSION_NAME") ?: "4.6"
 }
 
 repositories {
