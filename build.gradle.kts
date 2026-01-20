@@ -6,10 +6,8 @@ plugins {
     id("com.gradleup.shadow") version "8.3.8"
 }
 
-java {
-    withSourcesJar()
-    withJavadocJar()
-}
+// Note: We don't use withSourcesJar()/withJavadocJar() because we use
+// custom aggregateSources/aggregateJavadoc tasks that include all subprojects
 
 allprojects {
     group = "dev.iiahmed"
@@ -52,10 +50,14 @@ tasks.withType<JavaCompile> {
     )
 }
 
-if (gradle.startParameter.taskNames.any { it.contains("publish", ignoreCase = true) }) {
-    tasks.named<ShadowJar>("shadowJar") {
-        archiveClassifier.set("")
-    }
+// Disable standard jar - we use shadowJar instead
+tasks.named<Jar>("jar") {
+    enabled = false
+}
+
+// Configure shadowJar for publishing
+tasks.named<ShadowJar>("shadowJar") {
+    archiveClassifier.set("")
 }
 
 tasks.register<Jar>("aggregateSources") {
