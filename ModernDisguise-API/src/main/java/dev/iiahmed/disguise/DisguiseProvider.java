@@ -178,7 +178,16 @@ public abstract class DisguiseProvider {
 
             nickname = name;
             try {
-                DisguiseUtil.PROFILE_NAME.set(profile, name);
+                if (DisguiseUtil.IS_GAME_PROFILE_RECORD) {
+                    // authlib 7.0+ - GameProfile is a Record, create new profile and replace
+                    GameProfile newProfile = DisguiseUtil.createProfileWithName(profile, name);
+                    if (!DisguiseUtil.replaceProfile(player, newProfile)) {
+                        return DisguiseResponse.FAIL_NAME_CHANGE_EXCEPTION;
+                    }
+                } else {
+                    // authlib 6.x - modify field directly
+                    DisguiseUtil.PROFILE_NAME.set(profile, name);
+                }
                 DisguiseUtil.register(name, player);
             } catch (final IllegalAccessException e) {
                 // shouldn't happen
@@ -188,12 +197,30 @@ public abstract class DisguiseProvider {
 
         Skin realSkin = null;
         if (disguise.hasSkin()) {
-            final Optional<Property> optional = profile.getProperties().get("textures").stream().findFirst();
+            // Get current profile (may have been replaced by name change above)
+            final GameProfile currentProfile = DisguiseUtil.IS_GAME_PROFILE_RECORD
+                    ? DisguiseUtil.getProfile(player)
+                    : profile;
+
+            final Optional<Property> optional = DisguiseUtil.getProfileProperties(currentProfile).get("textures").stream().findFirst();
             if (optional.isPresent()) {
                 realSkin = DisguiseUtil.getSkin(optional.get());
-                profile.getProperties().removeAll("textures");
             }
-            profile.getProperties().put("textures", new Property("textures", disguise.getTextures(), disguise.getSignature()));
+
+            if (DisguiseUtil.IS_GAME_PROFILE_RECORD) {
+                // authlib 7.0+ - create new profile with updated skin
+                GameProfile newProfile = DisguiseUtil.createProfileWithNameAndSkin(
+                        currentProfile,
+                        DisguiseUtil.getProfileName(currentProfile),
+                        disguise.getTextures(),
+                        disguise.getSignature()
+                );
+                DisguiseUtil.replaceProfile(player, newProfile);
+            } else {
+                // authlib 6.x - modify properties directly
+                currentProfile.getProperties().removeAll("textures");
+                currentProfile.getProperties().put("textures", new Property("textures", disguise.getTextures(), disguise.getSignature()));
+            }
         }
 
         Entity entity = disguise.getEntity();
@@ -271,19 +298,49 @@ public abstract class DisguiseProvider {
         }
 
         final PlayerInfo info = this.playerInfo.get(player.getUniqueId());
-        if (info.hasName()) {
-            try {
-                DisguiseUtil.PROFILE_NAME.set(profile, info.getName());
-                DisguiseUtil.unregister(info.getNickname());
-            } catch (final IllegalAccessException e) {
+
+        if (DisguiseUtil.IS_GAME_PROFILE_RECORD) {
+            // authlib 7.0+ - create new profile with original name and skin
+            String originalName = info.hasName() ? info.getName() : DisguiseUtil.getProfileName(profile);
+            String textures = null;
+            String signature = null;
+
+            if (info.hasSkin()) {
+                final Skin skin = info.getSkin();
+                textures = skin.getTextures();
+                signature = skin.getSignature();
+            }
+
+            GameProfile newProfile = DisguiseUtil.createProfileWithNameAndSkin(
+                    profile,
+                    originalName,
+                    textures,
+                    signature
+            );
+
+            if (!DisguiseUtil.replaceProfile(player, newProfile)) {
                 return UndisguiseResponse.FAIL_NAME_CHANGE_EXCEPTION;
             }
-        }
 
-        if (info.hasSkin()) {
-            final Skin skin = info.getSkin();
-            profile.getProperties().removeAll("textures");
-            profile.getProperties().put("textures", new Property("textures", skin.getTextures(), skin.getSignature()));
+            if (info.hasName()) {
+                DisguiseUtil.unregister(info.getNickname());
+            }
+        } else {
+            // authlib 6.x - modify fields directly
+            if (info.hasName()) {
+                try {
+                    DisguiseUtil.PROFILE_NAME.set(profile, info.getName());
+                    DisguiseUtil.unregister(info.getNickname());
+                } catch (final IllegalAccessException e) {
+                    return UndisguiseResponse.FAIL_NAME_CHANGE_EXCEPTION;
+                }
+            }
+
+            if (info.hasSkin()) {
+                final Skin skin = info.getSkin();
+                profile.getProperties().removeAll("textures");
+                profile.getProperties().put("textures", new Property("textures", skin.getTextures(), skin.getSignature()));
+            }
         }
 
         this.playerInfo.remove(player.getUniqueId());
